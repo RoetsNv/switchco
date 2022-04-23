@@ -33,15 +33,14 @@ void setup_inputs(){
 
 void SwitchCo::setup_outputs(){
     //Gpio pins connected to outputs L1->L6
-    int gpio[7]={23,25,14,12,19,18,17};
     for(int i=0;i<7;i++){
         if(this->digitalIO[i]){
-           pinMode(gpio[i], OUTPUT);
+           pinMode(out_gpio[i], OUTPUT);
         }
         else{
             // configure LED PWM functionalitites
             ledcSetup(0,this->pwm_freq, this->pwm_res);
-            ledcAttachPin(gpio[i], 0);
+            ledcAttachPin(out_gpio[i], 0);
         }
         this->last_press[i]=0;
         this->last_release[i]=0; 
@@ -80,7 +79,21 @@ void hold_react(){
   send_can_msg(give_can_id(0x00,0x01,0x02),data_buffer,1);  
 }
 
-
+// Output logic
+void SwitchCo::set_output(int index, int duty,boolean state){
+    //check wether its digital out or PWM
+    if(this->digitalIO[index]){
+        digitalWrite(out_gpio[index],state);
+    }
+    else{
+        if(state){
+            ledcWrite(out_gpio[index], duty);
+        }
+        else{
+            ledcWrite(out_gpio[index], 0);
+        }
+    }
+}
 
 
 
