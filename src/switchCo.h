@@ -1,6 +1,6 @@
 #include <stdlib.h>
 #include <Arduino.h>
-
+#include <controllers/ginco_can_controller.h>
 class SwitchCo {
     private:
         //module specific
@@ -8,6 +8,7 @@ class SwitchCo {
         String friendly_name;
         String hw_version;
         byte data_buffer[8];
+        GCANController can_controller;
         unsigned long now;
         unsigned long heartbeat_interval; //when heartbeats should be send
         unsigned long long_press_val; //max hold time until it is not interpreted as a click but a long press
@@ -37,7 +38,9 @@ class SwitchCo {
         SwitchCo(byte canID,String friendly_name,boolean *digitialIO);
         void init();
         void setup_outputs();
+        void long_to_data_buffer(long input);
         void press_react(int index);
+        void hold_react();
         void loop();
         void release_react(int index);
         void set_output(int index, int duty,boolean state);

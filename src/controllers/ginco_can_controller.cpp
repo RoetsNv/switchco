@@ -10,6 +10,16 @@ canID(canID)
         while (1);
     }
 }
+GCANController::GCANController()
+{
+    CAN.setPins(35, 5);
+    // start the CAN bus at 500 kbps
+    if (!CAN.begin(500E3)) {
+        Serial.println("Starting CAN failed!");
+        while (1);
+    }
+}
+
 
 long GCANController::give_can_id(byte feature_type,byte index_number,byte func_id){
   //Event: 0x20000000 Action: 0x00

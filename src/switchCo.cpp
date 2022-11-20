@@ -16,20 +16,31 @@ SwitchCo::SwitchCo(byte canID, String friendly_name,boolean *digitialIO):
     this->long_press_val=500;
     this->double_press_val=300;
     this->now=millis();
+    this->can_controller=GCANController(this->canID);
 }
+
 //Define input pins
 void setup_inputs(){
     //Built in switch
-    pinMode(15, INPUT);
+    pinMode(15, INPUT_PULLUP);
     //Switch inputs S1-S6
-    pinMode(33, INPUT);
-    pinMode(26, INPUT);
-    pinMode(27, INPUT);
-    pinMode(13, INPUT);
-    pinMode(4, INPUT);
-    pinMode(16, INPUT);
+    pinMode(33, INPUT_PULLUP);
+    pinMode(26, INPUT_PULLUP);
+    pinMode(27, INPUT_PULLUP);
+    pinMode(13, INPUT_PULLUP);
+    pinMode(4, INPUT_PULLUP);
+    pinMode(16, INPUT_PULLUP);
 }
+//----------Tools-----------------//
 
+
+void SwitchCo::long_to_data_buffer(long input){
+  
+  for (int i = 0; i < 4; i++)
+  {
+    data_buffer[i] = ((input >> (8 * i)) & 0XFF);
+  }
+}
 
 void SwitchCo::setup_outputs(){
     //Gpio pins connected to outputs L1->L6
@@ -64,7 +75,7 @@ void SwitchCo::release_react(int index){
   if(now-last_release[index]<double_press_val && multiple_press[index]){
     //double press detected
     Serial.println("double press detected");
-    send_can_msg(give_can_id(0x00,0x01,0x01),data_buffer,1);
+    this->can_controller.send_can_msg(this->can_controller.give_can_id(0x00,0x01,0x01),data_buffer,1);
     multiple_press[index]=0;
   }
   else{
@@ -74,9 +85,9 @@ void SwitchCo::release_react(int index){
   hold_sent[index]=0;
   
 }
-void hold_react(){
+void SwitchCo::hold_react(){
   Serial.println("Button is hold for longer");
-  send_can_msg(give_can_id(0x00,0x01,0x02),data_buffer,1);  
+  this->can_controller.send_can_msg(this->can_controller.give_can_id(0x00,0x01,0x02),data_buffer,1);  
 }
 
 // Output logic
@@ -105,11 +116,11 @@ void SwitchCo::loop(){
         if(input_state[i]!=last_input_state[i]){
             if(input_state[i]){
             //going from 0 --> 1
-            press_react();
+            press_react(i);
             }
             if(last_input_state[i]){
             //going from 1 --> 0
-            release_react(); 
+            release_react(i); 
             }
             last_input_state[i]=input_state[i];
         }
@@ -124,13 +135,13 @@ void SwitchCo::loop(){
             if(hold_time[i]<500){
                 //just a single click happend send 
                 Serial.print("single click detected hold time: ");Serial.println(hold_time[i]);
-                send_can_msg(give_can_id(0x00,0x01,0x00),data_buffer,1);
+                this->can_controller.send_can_msg(this->can_controller.give_can_id(0x00,0x01,0x00),data_buffer,1);
             }
             else{
                 //Long release detected 
                 Serial.print("Long release  detected hold time: ");Serial.println(hold_time[i]);
-                long_to_data_buffer(hold_time);
-                send_can_msg(give_can_id(0x00,0x01,0x03),data_buffer,4);
+                long_to_data_buffer(hold_time[i]);
+                this->can_controller.send_can_msg(this->can_controller.give_can_id(0x00,0x01,0x03),data_buffer,4);
             }
             multiple_press[i]=0;
         }
