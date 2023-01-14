@@ -1,11 +1,12 @@
 #include "switchCo.h"
 
 
-SwitchCo::SwitchCo(byte canID, String friendly_name,boolean *digitialIO):
+SwitchCo::SwitchCo(byte canID, String friendly_name,boolean* digitialIOarr):
     canID(canID),
     friendly_name(friendly_name),
-    digitalIO(digitalIO)
+    digitalIO(digitialIOarr)
 {
+
     setup_inputs();
     setup_outputs();
     //initialize data to 0
@@ -16,20 +17,14 @@ SwitchCo::SwitchCo(byte canID, String friendly_name,boolean *digitialIO):
     this->long_press_val=500;
     this->double_press_val=300;
     this->now=millis();
-    this->can_controller=GCANController(this->canID);
+    //this->can_controller=GCANController(this->canID);
 }
 
 //Define input pins
-void setup_inputs(){
-    //Built in switch
-    pinMode(15, INPUT_PULLUP);
-    //Switch inputs S1-S6
-    pinMode(33, INPUT_PULLUP);
-    pinMode(26, INPUT_PULLUP);
-    pinMode(27, INPUT_PULLUP);
-    pinMode(13, INPUT_PULLUP);
-    pinMode(4, INPUT_PULLUP);
-    pinMode(16, INPUT_PULLUP);
+void SwitchCo::setup_inputs(){
+    for(int i=0;i<7;i++){
+        pinMode(in_gpio[i], INPUT_PULLUP);
+    }
 }
 //----------Tools-----------------//
 
@@ -46,7 +41,8 @@ void SwitchCo::setup_outputs(){
     //Gpio pins connected to outputs L1->L6
     for(int i=0;i<7;i++){
         if(this->digitalIO[i]){
-           pinMode(out_gpio[i], OUTPUT);
+            Serial.println("Dit is digital");
+            pinMode(out_gpio[i], OUTPUT);
         }
         else{
             // configure LED PWM functionalitites
@@ -109,16 +105,25 @@ void SwitchCo::set_output(int index, int duty,boolean state){
 
 
 void SwitchCo::loop(){
+    //check timers
+    
     //read inputs
     for(int i=0;i<7;i++){
         int in_select=this->in_gpio[i];
+        //switchco inputs are pullup
         input_state[i]=!digitalRead(in_select);
         if(input_state[i]!=last_input_state[i]){
+            //Debounce input
+            if(millis()-last_press[i] <20){
+                return;
+            }
             if(input_state[i]){
+            Serial.println("going from 0 --> 1");
             //going from 0 --> 1
             press_react(i);
             }
             if(last_input_state[i]){
+            Serial.println("going from 1 --> 0");
             //going from 1 --> 0
             release_react(i); 
             }
@@ -131,7 +136,8 @@ void SwitchCo::loop(){
         hold_react();
         hold_sent[i]=1;
         }
-        if(millis()-last_release[i]>double_press_val && multiple_press[i]){
+    }
+    if(millis()-last_release[i]>double_press_val && multiple_press[i]){
             if(hold_time[i]<500){
                 //just a single click happend send 
                 Serial.print("single click detected hold time: ");Serial.println(hold_time[i]);
@@ -145,7 +151,6 @@ void SwitchCo::loop(){
             }
             multiple_press[i]=0;
         }
-    }
     }
 
 }
