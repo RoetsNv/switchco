@@ -10,7 +10,7 @@ class SwitchCo {
         byte data_buffer[8];
         GCANController can_controller;
         const int timers[2]={50,500};
-        int timers[2]={0,0};
+        int timer_ticks[2]={0,0};
         unsigned long now;
         unsigned long heartbeat_interval; //when heartbeats should be send
         unsigned long long_press_val; //max hold time until it is not interpreted as a click but a long press
@@ -20,8 +20,7 @@ class SwitchCo {
         boolean *digitalIO; // which outputs are Digital IO (1) or analog IO (0)
         const int pwm_freq=10000;
         const int pwm_res=8; //resolution of pwm outputs
-        boolean output_state[7];
-        int output_[7];
+        
         //input related
         const uint8_t in_gpio[7]={15,33,26,27,13,4,16};
         unsigned long last_press[7];//last press of 6 inputs
@@ -29,13 +28,11 @@ class SwitchCo {
         unsigned long hold_time[7];
         boolean input_state[7];
         boolean last_input_state[7];
-        boolean hold_sent[7 ];
+        boolean hold_sent[7];
         boolean multiple_press[7];
-        
-
-
+        void on_timer(int index);
     public:
-        
+        int output_state[7];
         SwitchCo(byte canID,String friendly_name,boolean *digitialIO);
         void init();
         void setup_inputs();

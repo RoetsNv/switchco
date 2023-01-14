@@ -1,5 +1,6 @@
 #include "switchCo.h"
-
+//globals
+boolean fade_up[7]={true,true,true,true,true,true,true};
 
 SwitchCo::SwitchCo(byte canID, String friendly_name,boolean* digitialIOarr):
     canID(canID),
@@ -39,6 +40,7 @@ void SwitchCo::long_to_data_buffer(long input){
 
 void SwitchCo::setup_outputs(){
     //Gpio pins connected to outputs L1->L6
+    ledcSetup(0,this->pwm_freq, this->pwm_res);
     for(int i=0;i<7;i++){
         if(this->digitalIO[i]){
             Serial.println("Dit is digital");
@@ -46,8 +48,8 @@ void SwitchCo::setup_outputs(){
         }
         else{
             // configure LED PWM functionalitites
-            ledcSetup(0,this->pwm_freq, this->pwm_res);
-            ledcAttachPin(out_gpio[i], 0);
+            ledcSetup(i,this->pwm_freq, this->pwm_res);
+            ledcAttachPin(out_gpio[i], i);
         }
         this->last_press[i]=0;
         this->last_release[i]=0; 
@@ -91,22 +93,70 @@ void SwitchCo::set_output(int index, int duty,boolean state){
     //check wether its digital out or PWM
     if(this->digitalIO[index]){
         digitalWrite(out_gpio[index],state);
+        this->output_state[index]= int(state);
     }
     else{
         if(state){
-            ledcWrite(out_gpio[index], duty);
+            ledcWrite(index, duty);
+            this->output_state[index]= int(duty);
         }
         else{
-            ledcWrite(out_gpio[index], 0);
+            ledcWrite(index, 0);
+            this->output_state[index]= 0;
+
         }
     }
 }
 
+//timers
+void on_timer_0(SwitchCo* s){
+    if(fade_up[1]){
+        int to_set=s->output_state[1]+10;
+        if(to_set>254){
+            fade_up[1]=false;
+            to_set=254;
+        }
+        s->set_output(1,to_set,true); 
+         
+    }
+    else{
+        int to_set=s->output_state[1]-10;
+        if(to_set<0){
+            fade_up[1]=true;
+            to_set=0;
+        }  
+        //Serial.print("Setting minus: ");Serial.println(to_set);
+        s->set_output(1,to_set,true); 
+    }
+}
+void on_timer_1(SwitchCo* s){
+    
+}
 
+void SwitchCo::on_timer(int index){
+    switch(index) {
+    case 0:
+        on_timer_0(this);
+        break;
+    case 1:
+        on_timer_1(this);
+        break;
+    default:
+        // code block
+        Serial.println("ERR_timer");
+}
+}
 
 void SwitchCo::loop(){
     //check timers
-    
+    int index=0;
+    for (int req_time : this->timers) {
+        if(millis()-this->timer_ticks[index] >=req_time){
+            on_timer(index);
+            this->timer_ticks[index]=millis();
+        }
+        index++;
+    }
     //read inputs
     for(int i=0;i<7;i++){
         int in_select=this->in_gpio[i];
@@ -154,3 +204,7 @@ void SwitchCo::loop(){
     }
 
 }
+
+
+
+
