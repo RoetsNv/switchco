@@ -9,6 +9,10 @@ canID(canID)
         Serial.println("Starting CAN failed!");
         while (1);
     }
+    for(int i = 0; i<10;i++){
+        this->interested_in[i]=0x00;
+    }
+    this->last_msg= new GCanMessage();
 }
 GCANController::GCANController()
 {
@@ -19,7 +23,6 @@ GCANController::GCANController()
         while (1);
     }
 }
-
 
 long GCANController::give_can_id(byte feature_type,byte index_number,byte func_id){
   //Event: 0x20000000 Action: 0x00
@@ -45,4 +48,138 @@ void GCANController::send_can_msg(long can_id,const byte *data,size_t buffer_siz
    CAN.beginExtendedPacket(can_id);
    CAN.write(data,buffer_size);
    CAN.endPacket();
+}
+void GCANController::set_callback(GCAN_CALLBACK_SIGNATURE){
+    this->callback = callback;
+}
+void GCANController::add_moduleID(byte moduleID){
+    for(int i = 0; i<10;i++){
+        if(this->interested_in[i]==0x00){
+            this->interested_in[i]=moduleID;
+        }
+    }
+}
+void GCANController::handle_can_msg(int packet_size){
+
+    if (CAN.packetRtr()) {
+      // Remote transmission request, packet contains no data
+      Serial.print("RTR ");
+      return;
+    }
+    Serial.print("Received ");
+    Serial.print("packet with id 0x");
+    long packetID=CAN.packetId();
+    Serial.print(packetID, HEX);
+    if(!filter_msg(packetID,this->interested_in)){
+      //this packet is not usefull
+      return;
+    }
+    if (CAN.packetRtr()) {
+    Serial.print(" and requested length ");
+    Serial.println(CAN.packetDlc());
+    } else {
+      Serial.print(" and length ");
+      Serial.println(packet_size);  
+      int counter=0;
+      while (CAN.available()) {
+        receive_buffer[counter]=CAN.read();
+        //Serial.print(output_buffer[counter],HEX);Serial.print("-");
+        counter++;
+      }
+      long received_long=0;
+      for (int i = 0; i < packet_size; i++)
+      {
+          auto byteVal = (((long)output_buffer[i]) << (8 * i));
+          received_long |= byteVal;
+      }
+    Serial.println(received_long);
+    //Free up memory allocated by previous msg
+    delete this->last_msg;
+    this->last_msg=parse_message(packetID,packet_size);
+    print_message(this->last_msg);
+    if (callback) {
+        callback(*this->last_msg);
+    }
+    }    
+
+}
+void GCANController::check_if_msg(){
+    int packet_size=CAN.parsePacket();
+    if(packet_size!=0){
+        this->handle_can_msg( packet_size);
+    }
+    else{
+        return;
+    }
+}
+
+//Receiver helpers
+boolean filter_msg(long can_id,byte *interested_in){
+    //Mask to extract module ID
+    long module_id= (can_id >> 18) & 0xFF;
+    for(int i=0; i<10;i++){
+    if(module_id==interested_in[i]){
+        //MATCH! this module is interested in messages from this source
+        //Serial.println("I'm very interested");
+        return 1;
+        } 
+    }
+    return 0;
+}
+GCanMessage* parse_message(long can_id,size_t buf_size){
+      GCanMessage* msg_ptr = new GCanMessage();
+      msg_ptr->extended_id=can_id;
+      msg_ptr->event=(can_id >> 26) & 0x01;
+      msg_ptr->source_module_id=(can_id >> 18) & 0xFF;
+      msg_ptr->linked=(can_id >> 17) & 0x01;
+      msg_ptr->ack=(can_id >> 16) & 0x01;
+      msg_ptr->feature_type=(can_id >> 13) & 0x07;
+      msg_ptr->index=(can_id >> 8) & 0x1F;
+      msg_ptr->function_address=can_id & 0xFF;
+      msg_ptr->buffer_size=buf_size;
+      return msg_ptr;
+}
+//------Parsers----------//
+String parse_feature(byte feature_id){
+  switch (feature_id) {
+  case 0x00:
+    return "Button";
+    break;
+  case 0x01:
+    return "Switch out";
+    break;
+  case 0x02:
+    return "Dimmer";
+    break;
+  default:
+    return "";
+    break;
+  }
+}
+String parse_function(byte function_id){
+  switch (function_id) {
+  case 0x00:
+    return "Single Click";
+    break;
+  case 0x01:
+    return "Double Click";
+    break;
+  case 0x02:
+    return "Long Press";
+    break;
+  case 0x03:
+    return "Long Press Release";
+    break;
+  default:
+    return "";
+    break;
+  }
+}
+void print_message(GCanMessage *msg){
+  if(msg->event){Serial.println("This is a Event Message");}else{Serial.println("This is a Action Message");};
+  Serial.print("It comes from module: ");Serial.println(msg->source_module_id);
+  Serial.print("Linked and ACK: ");Serial.print(msg->linked);Serial.println(msg->ack);
+  Serial.print("Feature: ");Serial.print(parse_feature(msg->feature_type));Serial.print(" with index: ");Serial.println(msg->index);
+  Serial.print("It logged the function: ");Serial.println(parse_function(msg->function_address));
+  return;
 }

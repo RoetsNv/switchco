@@ -18,7 +18,7 @@ SwitchCo::SwitchCo(byte canID, String friendly_name,boolean* digitialIOarr):
     this->long_press_val=500;
     this->double_press_val=300;
     this->now=millis();
-    //this->can_controller=GCANController(this->canID);
+    this->can_controller=GCANController(this->canID);
 }
 
 //Define input pins
@@ -148,6 +148,8 @@ void SwitchCo::on_timer(int index){
 }
 
 void SwitchCo::loop(){
+    //read canbus
+    this->can_controller.check_if_msg();
     //check timers
     int index=0;
     for (int req_time : this->timers) {
