@@ -49,9 +49,7 @@ void GCANController::send_can_msg(long can_id,const byte *data,size_t buffer_siz
    CAN.write(data,buffer_size);
    CAN.endPacket();
 }
-void GCANController::set_callback(GCAN_CALLBACK_SIGNATURE){
-    this->callback = callback;
-}
+
 void GCANController::add_moduleID(byte moduleID){
     for(int i = 0; i<10;i++){
         if(this->interested_in[i]==0x00){
@@ -59,61 +57,12 @@ void GCANController::add_moduleID(byte moduleID){
         }
     }
 }
-void GCANController::handle_can_msg(int packet_size){
 
-    if (CAN.packetRtr()) {
-      // Remote transmission request, packet contains no data
-      Serial.print("RTR ");
-      return;
-    }
-    Serial.print("Received ");
-    Serial.print("packet with id 0x");
-    long packetID=CAN.packetId();
-    Serial.print(packetID, HEX);
-    if(!filter_msg(packetID,this->interested_in)){
-      //this packet is not usefull
-      return;
-    }
-    if (CAN.packetRtr()) {
-    Serial.print(" and requested length ");
-    Serial.println(CAN.packetDlc());
-    } else {
-      Serial.print(" and length ");
-      Serial.println(packet_size);  
-      int counter=0;
-      while (CAN.available()) {
-        receive_buffer[counter]=CAN.read();
-        //Serial.print(output_buffer[counter],HEX);Serial.print("-");
-        counter++;
-      }
-      long received_long=0;
-      for (int i = 0; i < packet_size; i++)
-      {
-          auto byteVal = (((long)output_buffer[i]) << (8 * i));
-          received_long |= byteVal;
-      }
-    Serial.println(received_long);
-    //Free up memory allocated by previous msg
-    delete this->last_msg;
-    this->last_msg=parse_message(packetID,packet_size);
-    print_message(this->last_msg);
-    if (callback) {
-        callback(*this->last_msg);
-    }
-    }    
 
-}
-void GCANController::check_if_msg(){
-    int packet_size=CAN.parsePacket();
-    if(packet_size!=0){
-        this->handle_can_msg( packet_size);
-    }
-    else{
-        return;
-    }
-}
+///////-----------------------------RECEIVE-------------------------------------------------------
 
 //Receiver helpers
+
 boolean filter_msg(long can_id,byte *interested_in){
     //Mask to extract module ID
     long module_id= (can_id >> 18) & 0xFF;
@@ -126,7 +75,7 @@ boolean filter_msg(long can_id,byte *interested_in){
     }
     return 0;
 }
-GCanMessage* parse_message(long can_id,size_t buf_size){
+GCanMessage* parse_message(long can_id,size_t buf_size,long received_long){
       GCanMessage* msg_ptr = new GCanMessage();
       msg_ptr->extended_id=can_id;
       msg_ptr->event=(can_id >> 26) & 0x01;
@@ -137,6 +86,7 @@ GCanMessage* parse_message(long can_id,size_t buf_size){
       msg_ptr->index=(can_id >> 8) & 0x1F;
       msg_ptr->function_address=can_id & 0xFF;
       msg_ptr->buffer_size=buf_size;
+      msg_ptr->received_long=received_long;
       return msg_ptr;
 }
 //------Parsers----------//
@@ -182,4 +132,65 @@ void print_message(GCanMessage *msg){
   Serial.print("Feature: ");Serial.print(parse_feature(msg->feature_type));Serial.print(" with index: ");Serial.println(msg->index);
   Serial.print("It logged the function: ");Serial.println(parse_function(msg->function_address));
   return;
+}
+
+void GCANController::handle_can_msg(int packet_size){
+
+    if (CAN.packetRtr()) {
+      // Remote transmission request, packet contains no data
+      Serial.print("RTR ");
+      return;
+    }
+    Serial.print("Received ");
+    Serial.print("packet with id 0x");
+    long packetID=CAN.packetId();
+    Serial.print(packetID, HEX);
+    if(!filter_msg(packetID,this->interested_in)){
+      //this packet is not usefull
+      return;
+    }
+    if (CAN.packetRtr()) {
+    Serial.print(" and requested length ");
+    Serial.println(CAN.packetDlc());
+    } else {
+      Serial.print(" and length ");
+      Serial.println(packet_size);  
+      int counter=0;
+      while (CAN.available()) {
+        receive_buffer[counter]=CAN.read();
+        //Serial.print(output_buffer[counter],HEX);Serial.print("-");
+        counter++;
+      }
+      long received_long=0;
+      for (int i = 0; i < packet_size; i++)
+      {
+          auto byteVal = (((long)receive_buffer[i]) << (8 * i));
+          received_long |= byteVal;
+      }
+    Serial.println(received_long);
+    //Free up memory allocated by previous msg
+    delete this->last_msg;
+    this->last_msg=parse_message(packetID,packet_size,received_long);
+    print_message(this->last_msg);
+    this->gcan_ready=true;
+    }    
+
+}
+void GCANController::check_can_bus(){
+    int packet_size=CAN.parsePacket();
+    if(packet_size!=0){
+        this->handle_can_msg(packet_size);
+    }
+    else{
+        return;
+    }
+}
+
+boolean GCANController::gcan_received(){
+  return this->gcan_ready;
+}
+GCanMessage GCANController::give_last_msg(){
+  GCanMessage m = *this->last_msg;
+  this->gcan_ready=false;
+  return m;
 }

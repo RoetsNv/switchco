@@ -1,6 +1,11 @@
 #include "switchCo.h"
 //globals
 boolean fade_up[7]={true,true,true,true,true,true,true};
+void setup_can_ids(GCANController * ctrl){
+    ctrl->add_moduleID(0x01);
+    ctrl->add_moduleID(0x02);
+    ctrl->add_moduleID(0x03);
+}
 
 SwitchCo::SwitchCo(byte canID, String friendly_name,boolean* digitialIOarr):
     canID(canID),
@@ -19,6 +24,8 @@ SwitchCo::SwitchCo(byte canID, String friendly_name,boolean* digitialIOarr):
     this->double_press_val=300;
     this->now=millis();
     this->can_controller=GCANController(this->canID);
+    setup_can_ids(&this->can_controller);
+
 }
 
 //Define input pins
@@ -149,7 +156,7 @@ void SwitchCo::on_timer(int index){
 
 void SwitchCo::loop(){
     //read canbus
-    this->can_controller.check_if_msg();
+    this->can_controller.check_can_bus();
     //check timers
     int index=0;
     for (int req_time : this->timers) {
@@ -206,6 +213,7 @@ void SwitchCo::loop(){
     }
 
 }
+
 
 
 
