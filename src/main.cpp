@@ -1,13 +1,16 @@
 #include <Arduino.h>
 #include <switchCo.h>
-
-boolean digio[7] ={true,false,true,true,true,true,true};
-SwitchCo s = SwitchCo(0x01,"test01",digio);
+#include <controllers/sk.h>
+boolean digio[7] ={false,false,false,true,true,true,true};
+SwitchCo s = SwitchCo(0x02,"test02",digio);
+sk pixel=sk();
 void setup() {
   // put your setup code here, to run once:
     Serial.begin(115200);
     Serial.println("I'm very interested");
-
+    pixel.begin(32,1);
+    pixel.color(0,70,200,0,0,5);
+    pixel.show();
 
 }
 
