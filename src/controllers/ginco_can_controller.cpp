@@ -1,7 +1,7 @@
 #include "ginco_can_controller.h"
 
-GCANController::GCANController(byte canID):
-canID(canID)
+GCANController::GCANController(byte moduleID):
+moduleID(moduleID)
 {
     CAN.setPins(35, 5);
     // start the CAN bus at 500 kbps
@@ -24,11 +24,12 @@ GCANController::GCANController()
     }
 }
 
-long GCANController::give_can_id(byte feature_type,byte index_number,byte func_id){
-  //Event: 0x20000000 Action: 0x00
-  long can_id=0x4000000;
+long GCANController::give_can_id(boolean is_event, byte targetmoduleID,byte feature_type,byte index_number,byte func_id,boolean ack){
+  //Event: 0x4000000 Action: 0x00
+  long can_id= (is_event) ? 0x4000000 : 0x00;
+  can_id+= (ack) ? 0x10000: 0x00;
   //Set module id
-  long mod_id=0;mod_id+=canID;
+  long mod_id=0;mod_id+=targetmoduleID;
   mod_id=mod_id<<18;
   can_id=can_id+mod_id;
   //Set 8 bit feature address
@@ -44,6 +45,7 @@ long GCANController::give_can_id(byte feature_type,byte index_number,byte func_i
   return can_id;
 }
 
+
 void GCANController::send_can_msg(long can_id,const byte *data,size_t buffer_size){
    CAN.beginExtendedPacket(can_id);
    CAN.write(data,buffer_size);
@@ -54,6 +56,7 @@ void GCANController::add_moduleID(byte moduleID){
     for(int i = 0; i<10;i++){
         if(this->interested_in[i]==0x00){
             this->interested_in[i]=moduleID;
+            return;
         }
     }
 }

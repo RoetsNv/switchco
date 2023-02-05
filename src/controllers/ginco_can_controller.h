@@ -42,7 +42,7 @@ struct GCanMessage {
 
 class GCANController {
     private:
-    byte canID;
+    byte moduleID;
     byte output_buffer[8]; //buffer to write data to when sending msg
     byte receive_buffer[8];
     GCanMessage* last_msg;
@@ -51,11 +51,11 @@ class GCANController {
 
     GCAN_CALLBACK_SIGNATURE;
     public:
-        GCANController(byte canID);
+        GCANController(byte moduleID);
         GCANController();
         void setup();
         void send_can_msg(long can_id,const byte *data,size_t buffer_size);
-        long give_can_id(byte feature_type,byte index_number,byte func_id);
+        long give_can_id(boolean is_event, byte targetmoduleID,byte feature_type,byte index_number,byte func_id,boolean ack);
         void add_moduleID(byte moduleID); //add module ID to interested list
         void check_can_bus();
         boolean gcan_received();

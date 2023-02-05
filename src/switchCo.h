@@ -4,7 +4,7 @@
 class SwitchCo {
     private:
         //module specific
-        byte canID;
+        byte moduleID;
         String friendly_name;
         String hw_version;
         byte data_buffer[8];
@@ -33,15 +33,15 @@ class SwitchCo {
         void on_timer(int index);
     public:
         int output_state[7];
-        SwitchCo(byte canID,String friendly_name,boolean *digitialIO);
+        SwitchCo(byte moduleID,String friendly_name,boolean *digitialIO);
         void init();
         void setup_inputs();
         void setup_outputs();
         void long_to_data_buffer(long input);
         void press_react(int index);
-        void hold_react();
+        void hold_react(int index);
         void loop();
         void release_react(int index);
         void set_output(int index, int duty,boolean state);
-
+        void on_can_msg(GCanMessage m);
 };

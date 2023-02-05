@@ -7,8 +7,8 @@ void setup_can_ids(GCANController * ctrl){
     ctrl->add_moduleID(0x03);
 }
 
-SwitchCo::SwitchCo(byte canID, String friendly_name,boolean* digitialIOarr):
-    canID(canID),
+SwitchCo::SwitchCo(byte moduleID, String friendly_name,boolean* digitialIOarr):
+    moduleID(moduleID),
     friendly_name(friendly_name),
     digitalIO(digitialIOarr)
 {
@@ -23,7 +23,7 @@ SwitchCo::SwitchCo(byte canID, String friendly_name,boolean* digitialIOarr):
     this->long_press_val=500;
     this->double_press_val=300;
     this->now=millis();
-    this->can_controller=GCANController(this->canID);
+    this->can_controller=GCANController(this->moduleID);
     setup_can_ids(&this->can_controller);
 
 }
@@ -80,7 +80,7 @@ void SwitchCo::release_react(int index){
   if(now-last_release[index]<double_press_val && multiple_press[index]){
     //double press detected
     Serial.println("double press detected");
-    this->can_controller.send_can_msg(this->can_controller.give_can_id(0x00,0x01,0x01),data_buffer,1);
+    this->can_controller.send_can_msg(this->can_controller.give_can_id(true,this->moduleID,0x00,index,0x01,false),data_buffer,1);
     multiple_press[index]=0;
   }
   else{
@@ -90,9 +90,9 @@ void SwitchCo::release_react(int index){
   hold_sent[index]=0;
   
 }
-void SwitchCo::hold_react(){
+void SwitchCo::hold_react(int index){
   Serial.println("Button is hold for longer");
-  this->can_controller.send_can_msg(this->can_controller.give_can_id(0x00,0x01,0x02),data_buffer,1);  
+  this->can_controller.send_can_msg(this->can_controller.give_can_id(true,this->moduleID,0x00,index,0x02,false),data_buffer,1);  
 }
 
 // Output logic
@@ -154,9 +154,44 @@ void SwitchCo::on_timer(int index){
 }
 }
 
+void  SwitchCo::on_can_msg(GCanMessage m){
+    if(!m.event && (m.source_module_id==this->moduleID)){
+        //action for own outputs
+        switch(m.function_address) {
+        //switch off
+        case 0x00:
+            this->set_output(m.index,0,false);
+            break;
+        //switch on with value
+        case 0x01:
+            if(m.received_long!=0){
+                int result = (m.received_long > 256) ? 256 : m.received_long;
+                this->set_output(m.index,result,true);
+            }
+            else{
+                this->set_output(m.index,256,true);
+            }
+            break;
+        //toggle
+        case 0x02:
+            if(this->output_state[m.index] > 0){
+                this->set_output(m.index,0,false);
+            }
+            else{
+               this->set_output(m.index,256,true); 
+            }
+        }
+    }   
+}
+
+
 void SwitchCo::loop(){
     //read canbus
     this->can_controller.check_can_bus();
+    //check if there are any can msg's ready
+    if (this->can_controller.gcan_received()){
+        this->on_can_msg(this->can_controller.give_last_msg());
+    }
     //check timers
     int index=0;
     for (int req_time : this->timers) {
@@ -192,7 +227,7 @@ void SwitchCo::loop(){
         //button is still pressed
         if(millis()-last_press[i]>long_press_val){
         //button pressed longer than 500ms
-        hold_react();
+        hold_react(i);
         hold_sent[i]=1;
         }
     }
@@ -200,13 +235,13 @@ void SwitchCo::loop(){
             if(hold_time[i]<500){
                 //just a single click happend send 
                 Serial.print("single click detected hold time: ");Serial.println(hold_time[i]);
-                this->can_controller.send_can_msg(this->can_controller.give_can_id(0x00,0x01,0x00),data_buffer,1);
+                this->can_controller.send_can_msg(this->can_controller.give_can_id(true,this->moduleID,0x00,i,0x00,false),data_buffer,1);
             }
             else{
                 //Long release detected 
                 Serial.print("Long release  detected hold time: ");Serial.println(hold_time[i]);
                 long_to_data_buffer(hold_time[i]);
-                this->can_controller.send_can_msg(this->can_controller.give_can_id(0x00,0x01,0x03),data_buffer,4);
+                this->can_controller.send_can_msg(this->can_controller.give_can_id(true,this->moduleID,0x00,i,0x03,false),data_buffer,4);
             }
             multiple_press[i]=0;
         }
