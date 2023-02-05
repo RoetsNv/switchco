@@ -9,7 +9,7 @@ class SwitchCo {
         String hw_version;
         byte data_buffer[8];
         GCANController can_controller;
-        const int timers[2]={50,500};
+        const int timers[2]={35,500};
         int timer_ticks[2]={0,0};
         unsigned long now;
         unsigned long heartbeat_interval; //when heartbeats should be send

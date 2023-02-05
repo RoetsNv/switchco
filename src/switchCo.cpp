@@ -1,6 +1,14 @@
 #include "switchCo.h"
 //globals
 boolean fade_up[7]={true,true,true,true,true,true,true};
+boolean show_click_effect[7]={true,true,true,true,true,true,true}; //show effect when pressed (linked input <---> output)
+boolean click_effect_running[7]={false,false,false,false,false,false,false}; 
+boolean pulse_effect[7]={false,false,false,false,false,false,false}; //show pulse effect on output x
+boolean blink_effect[7]={false,false,false,false,false,false,false}; //show blink effect on output x
+void reset_effects(int index){
+    pulse_effect[index]=false;
+    blink_effect[index]=false;
+}
 void setup_can_ids(GCANController * ctrl){
     ctrl->add_moduleID(0x01);
     ctrl->add_moduleID(0x02);
@@ -50,7 +58,6 @@ void SwitchCo::setup_outputs(){
     ledcSetup(0,this->pwm_freq, this->pwm_res);
     for(int i=0;i<7;i++){
         if(this->digitalIO[i]){
-            Serial.println("Dit is digital");
             pinMode(out_gpio[i], OUTPUT);
         }
         else{
@@ -70,8 +77,12 @@ void SwitchCo::setup_outputs(){
 }
 
 //-----------Button Logic------------//
-void SwitchCo::press_react(int index){
+void SwitchCo::press_react(int index){  
   last_press[index]=millis();
+  if(show_click_effect[index]){
+      this->set_output(index,256,true);
+      click_effect_running[index]=true;
+  }
 }
 void SwitchCo::release_react(int index){
   now=millis();
@@ -117,27 +128,50 @@ void SwitchCo::set_output(int index, int duty,boolean state){
 
 //timers
 void on_timer_0(SwitchCo* s){
-    if(fade_up[1]){
-        int to_set=s->output_state[1]+10;
-        if(to_set>254){
-            fade_up[1]=false;
-            to_set=254;
+    
+    for(int i = 0;i<7;i++){
+        if(pulse_effect[i] && !click_effect_running[i]){
+            if(fade_up[i] ){
+                int to_set=s->output_state[i]+10;
+                if(to_set>254){
+                    fade_up[i]=false;
+                    to_set=254;
+                }
+                s->set_output(i,to_set,true); 
+            }
+            else{
+                int to_set=s->output_state[i]-10;
+                if(to_set<0){
+                    fade_up[i]=true;
+                    to_set=0;
+                }  
+                s->set_output(i,to_set,true); 
+            }
         }
-        s->set_output(1,to_set,true); 
-         
+
+        if(click_effect_running[i]){
+            int to_set=s->output_state[i]-10;
+            if(to_set<=0){
+                click_effect_running[i]=false;
+                s->set_output(i,0,false);
+            }else{
+                s->set_output(i,to_set,true);
+            }  
+        }
     }
-    else{
-        int to_set=s->output_state[1]-10;
-        if(to_set<0){
-            fade_up[1]=true;
-            to_set=0;
-        }  
-        //Serial.print("Setting minus: ");Serial.println(to_set);
-        s->set_output(1,to_set,true); 
-    }
+    
 }
 void on_timer_1(SwitchCo* s){
-    
+    for(int i = 0;i<7;i++){
+        if(blink_effect[i]){
+            if(s->output_state[i] > 0){
+                s->set_output(i,0,false);
+            }
+            else{
+            s->set_output(i,256,true); 
+            }
+        }
+    }   
 }
 
 void SwitchCo::on_timer(int index){
@@ -157,6 +191,7 @@ void SwitchCo::on_timer(int index){
 void  SwitchCo::on_can_msg(GCanMessage m){
     if(!m.event && (m.source_module_id==this->moduleID)){
         //action for own outputs
+        reset_effects(m.index);
         switch(m.function_address) {
         //switch off
         case 0x00:
@@ -174,13 +209,33 @@ void  SwitchCo::on_can_msg(GCanMessage m){
             break;
         //toggle
         case 0x02:
+            blink_effect[m.index]=false;
+            pulse_effect[m.index]=false;
             if(this->output_state[m.index] > 0){
                 this->set_output(m.index,0,false);
             }
             else{
                this->set_output(m.index,256,true); 
             }
+            break;
+        case 0x03:
+            switch (m.received_long)
+            {
+            case 1:
+                pulse_effect[m.index]=true;
+                break;
+            case 2:
+                blink_effect[m.index]=true;
+                break;
+            default:
+                this->set_output(m.index,0,false);
+                blink_effect[m.index]=false;
+                pulse_effect[m.index]=false;
+                break;
+            }
+            
         }
+        
     }   
 }
 
