@@ -69,7 +69,7 @@ void GCANController::add_moduleID(byte moduleID){
 //Receiver helpers
 void set_pixel(sk* p,long can_id){
   long ind=(can_id >> 18) & 0xFF;
-  long color = id_color_dict[ind] ;
+  long color = (ind>20) ? 0x000000ff : id_color_dict[ind] ;
   //color=(color << 8 );
   p->color32(0,color,1);
   p->show();

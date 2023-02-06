@@ -91,7 +91,7 @@ void SwitchCo::release_react(int index){
   //check for double press
   if(now-last_release[index]<double_press_val && multiple_press[index]){
     //double press detected
-    Serial.println("double press detected");
+    //Serial.println("double press detected");
     this->can_controller.send_can_msg(this->can_controller.give_can_id(true,this->moduleID,0x00,index,0x01,false),data_buffer,1);
     multiple_press[index]=0;
   }
@@ -103,7 +103,7 @@ void SwitchCo::release_react(int index){
   
 }
 void SwitchCo::hold_react(int index){
-  Serial.println("Button is hold for longer");
+  //Serial.println("Button is hold for longer");
   this->can_controller.send_can_msg(this->can_controller.give_can_id(true,this->moduleID,0x00,index,0x02,false),data_buffer,1);  
 }
 
@@ -314,12 +314,12 @@ void SwitchCo::loop(){
     if(millis()-last_release[i]>double_press_val && multiple_press[i]){
             if(hold_time[i]<500){
                 //just a single click happend send 
-                Serial.print("single click detected hold time: ");Serial.println(hold_time[i]);
+                //Serial.print("single click detected hold time: ");Serial.println(hold_time[i]);
                 this->can_controller.send_can_msg(this->can_controller.give_can_id(true,this->moduleID,0x00,i,0x00,false),data_buffer,1);
             }
             else{
                 //Long release detected 
-                Serial.print("Long release  detected hold time: ");Serial.println(hold_time[i]);
+                //Serial.print("Long release  detected hold time: ");Serial.println(hold_time[i]);
                 long_to_data_buffer(hold_time[i]);
                 this->can_controller.send_can_msg(this->can_controller.give_can_id(true,this->moduleID,0x00,i,0x03,false),data_buffer,4);
             }
