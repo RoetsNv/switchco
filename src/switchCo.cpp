@@ -175,7 +175,13 @@ void on_timer_1(SwitchCo* s){
         }
     }   
 }
-
+void on_timer_2(SwitchCo* s){
+    //send heartbeat
+    s->heartbeat();
+}
+void SwitchCo::heartbeat(){
+    this->can_controller.send_can_msg(this->can_controller.give_can_id(true,this->moduleID,0xFF,0x00,0x00,false),data_buffer,1);
+}
 void SwitchCo::on_timer(int index){
     switch(index) {
     case 0:
@@ -184,6 +190,9 @@ void SwitchCo::on_timer(int index){
     case 1:
         on_timer_1(this);
         break;
+    case 2:
+        on_timer_2(this);
+    break;
     default:
         // code block
         Serial.println("ERR_timer");
@@ -192,52 +201,68 @@ void SwitchCo::on_timer(int index){
 
 void  SwitchCo::on_can_msg(GCanMessage m){
     if(!m.event && (m.source_module_id==this->moduleID)){
-        //action for own outputs
-        reset_effects(m.index);
-        switch(m.function_address) {
-        //switch off
-        case 0x00:
-            this->set_output(m.index,0,false);
-            break;
-        //switch on with value
-        case 0x01:
-            if(m.received_long!=0){
-                int result = (m.received_long > 256) ? 256 : m.received_long;
-                this->set_output(m.index,result,true);
-            }
-            else{
-                this->set_output(m.index,256,true);
-            }
-            break;
-        //toggle
-        case 0x02:
-            blink_effect[m.index]=false;
-            pulse_effect[m.index]=false;
-            if(this->output_state[m.index] > 0){
+        //actions for outputs:
+        if(m.feature_type == 1){
+            //action for own outputs
+            reset_effects(m.index);
+            switch(m.function_address) {
+            //switch off
+            case 0x00:
                 this->set_output(m.index,0,false);
-            }
-            else{
-               this->set_output(m.index,256,true); 
-            }
-            break;
-        case 0x03:
-            switch (m.received_long)
-            {
-            case 1:
-                pulse_effect[m.index]=true;
+                this->can_controller.ack_msg(&m,data_buffer,1);
                 break;
-            case 2:
-                blink_effect[m.index]=true;
+            //switch on with value
+            case 0x01:
+                if(m.received_long!=0){
+                    int result = (m.received_long > 256) ? 256 : m.received_long;
+                    this->set_output(m.index,result,true);
+                }
+                else{
+                    this->set_output(m.index,256,true);
+                }
+                this->can_controller.ack_msg(&m,data_buffer,1);
                 break;
-            default:
-                this->set_output(m.index,0,false);
+            //toggle
+            case 0x02:
                 blink_effect[m.index]=false;
                 pulse_effect[m.index]=false;
+                if(this->output_state[m.index] > 0){
+                    this->set_output(m.index,0,false);
+                }
+                else{
+                this->set_output(m.index,256,true); 
+                }
+                this->can_controller.ack_msg(&m,data_buffer,1);
                 break;
-            }
-            
+            case 0x03:
+                switch (m.received_long)
+                {
+                case 1:
+                    if(!this->digitalIO[m.index]){
+                        pulse_effect[m.index]=true;
+                    }
+                    break;
+                case 2:
+                    blink_effect[m.index]=true;
+                    break;
+                default:
+                    this->set_output(m.index,0,false);
+                    blink_effect[m.index]=false;
+                    pulse_effect[m.index]=false;
+                    break;
+                }
+                this->can_controller.ack_msg(&m,data_buffer,1);
+                break;
+            case 0xFF:
+                //request state
+                long_to_data_buffer(this->output_state[m.index]);
+                this->can_controller.ack_msg(&m,data_buffer,1);
+                break;
+            default:
+                //nothing 
+                break;
+            }            
         }
-        
     }   
 }
 
@@ -269,12 +294,10 @@ void SwitchCo::loop(){
                 return;
             }
             if(input_state[i]){
-            Serial.println("going from 0 --> 1");
             //going from 0 --> 1
             press_react(i);
             }
             if(last_input_state[i]){
-            Serial.println("going from 1 --> 0");
             //going from 1 --> 0
             release_react(i); 
             }

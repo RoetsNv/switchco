@@ -1,5 +1,6 @@
 #include "ginco_can_controller.h"
 uint32_t id_color_dict[20] = {0xb0306000,0x8a2be200,0xffff5400,0x1e90ff00,0x00ff0000,0x8a2be200,0x0000ff00,0xadff2f00,0xff000000,0x00ffff00,0xb03060ff,0x8a2be2ff,0xffff54ff,0x1e90ffff,0x00ff00ff,0x8a2be2ff,0x0000ffff,0xadff2fff,0xff0000ff,0x00ffffff};
+
 GCANController::GCANController(byte moduleID,sk* p):
 moduleID(moduleID),
 pixel(p)
@@ -68,10 +69,8 @@ void GCANController::add_moduleID(byte moduleID){
 //Receiver helpers
 void set_pixel(sk* p,long can_id){
   long ind=(can_id >> 18) & 0xFF;
-    Serial.print("index is "); Serial.println(ind);
   long color = id_color_dict[ind] ;
   //color=(color << 8 );
-  Serial.print("going to set color: 0x"); Serial.println(color, HEX);
   p->color32(0,color,1);
   p->show();
   return;
@@ -156,25 +155,21 @@ void GCANController::handle_can_msg(int packet_size){
       Serial.print("RTR ");
       return;
     }
-    Serial.print("Received ");
-    Serial.print("packet with id 0x");
-  
     long packetID=CAN.packetId();
+    //Serial.print("Received packet with id 0x");Serial.println(packetID, HEX);
     set_pixel(this->pixel,packetID);
     if(!filter_msg(packetID,this->interested_in)){
       //this packet is not usefull
       return;
     }
     if (CAN.packetRtr()) {
-    Serial.print(" and requested length ");
-    Serial.println(CAN.packetDlc());
+    // Serial.print(" and requested length ");
+    // Serial.println(CAN.packetDlc());
     } else {
-      Serial.print(" and length ");
-      Serial.println(packet_size);  
+      //Serial.print(" and length ");Serial.println(packet_size);  
       int counter=0;
       while (CAN.available()) {
         receive_buffer[counter]=CAN.read();
-        //Serial.print(output_buffer[counter],HEX);Serial.print("-");
         counter++;
       }
       long received_long=0;
@@ -187,7 +182,7 @@ void GCANController::handle_can_msg(int packet_size){
     //Free up memory allocated by previous msg
     delete this->last_msg;
     this->last_msg=parse_message(packetID,packet_size,received_long);
-    print_message(this->last_msg);
+    //print_message(this->last_msg);
     this->gcan_ready=true;
     }    
 
@@ -209,4 +204,8 @@ GCanMessage GCANController::give_last_msg(){
   GCanMessage m = *this->last_msg;
   this->gcan_ready=false;
   return m;
-}
+} 
+void GCANController::ack_msg(GCanMessage *m,byte *buffer,size_t size){
+  send_can_msg(this->give_can_id(m->event,m->source_module_id, m->feature_type,m->index,m->function_address,true),buffer,size);
+  return;
+}  

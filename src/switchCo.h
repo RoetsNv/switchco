@@ -10,8 +10,8 @@ class SwitchCo {
         String hw_version;
         byte data_buffer[8];
         GCANController can_controller;
-        const int timers[2]={35,500};
-        int timer_ticks[2]={0,0};
+        const int timers[3]={35,500,10000};
+        int timer_ticks[3]={0,0,0};
         unsigned long now;
         unsigned long heartbeat_interval; //when heartbeats should be send
         unsigned long long_press_val; //max hold time until it is not interpreted as a click but a long press
@@ -45,4 +45,5 @@ class SwitchCo {
         void release_react(int index);
         void set_output(int index, int duty,boolean state);
         void on_can_msg(GCanMessage m);
+        void heartbeat();
 };

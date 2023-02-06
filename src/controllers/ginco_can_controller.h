@@ -64,4 +64,5 @@ class GCANController {
         boolean gcan_received();
         GCanMessage give_last_msg();
         void handle_can_msg(int packet_size);
+        void ack_msg(GCanMessage *m,byte *data,size_t buffer_size);
 }; 

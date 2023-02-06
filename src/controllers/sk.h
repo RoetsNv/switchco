@@ -139,10 +139,9 @@ return;
 /*-------------------------------------------------------------------------*/
 void show(){
 
-    int rc;
     // esp_err_t rmt_write_items(rmt_channel_t channel, rmt_item32_t *rmt_item, int item_num, bool wait_tx_done)
     
-    rc = rmt_write_items(skconfig.channel, _skstrip, _bitcount, 1);
+    rmt_write_items(skconfig.channel, _skstrip, _bitcount, 1);
     
     
     //delay(2);
