@@ -20,9 +20,10 @@ SwitchCo::SwitchCo(byte moduleID, String friendly_name,boolean* digitialIOarr):
     friendly_name(friendly_name),
     digitalIO(digitialIOarr)
 {
-
     setup_inputs();
     setup_outputs();
+    this->pixel=sk();
+    this->pixel.begin(32,1);
     //initialize data to 0
     for(int i=0;i<8;i++){
         this->data_buffer[i]=0x00;
@@ -31,7 +32,7 @@ SwitchCo::SwitchCo(byte moduleID, String friendly_name,boolean* digitialIOarr):
     this->long_press_val=500;
     this->double_press_val=300;
     this->now=millis();
-    this->can_controller=GCANController(this->moduleID);
+    this->can_controller=GCANController(this->moduleID,&this->pixel);
     setup_can_ids(&this->can_controller);
 
 }
@@ -162,6 +163,7 @@ void on_timer_0(SwitchCo* s){
     
 }
 void on_timer_1(SwitchCo* s){
+    s->pixel.clear();
     for(int i = 0;i<7;i++){
         if(blink_effect[i]){
             if(s->output_state[i] > 0){

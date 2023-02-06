@@ -1,7 +1,8 @@
 #include "ginco_can_controller.h"
-
-GCANController::GCANController(byte moduleID):
-moduleID(moduleID)
+uint32_t id_color_dict[20] = {0xb0306000,0x8a2be200,0xffff5400,0x1e90ff00,0x00ff0000,0x8a2be200,0x0000ff00,0xadff2f00,0xff000000,0x00ffff00,0xb03060ff,0x8a2be2ff,0xffff54ff,0x1e90ffff,0x00ff00ff,0x8a2be2ff,0x0000ffff,0xadff2fff,0xff0000ff,0x00ffffff};
+GCANController::GCANController(byte moduleID,sk* p):
+moduleID(moduleID),
+pixel(p)
 {
     CAN.setPins(35, 5);
     // start the CAN bus at 500 kbps
@@ -65,10 +66,21 @@ void GCANController::add_moduleID(byte moduleID){
 ///////-----------------------------RECEIVE-------------------------------------------------------
 
 //Receiver helpers
+void set_pixel(sk* p,long can_id){
+  long ind=(can_id >> 18) & 0xFF;
+    Serial.print("index is "); Serial.println(ind);
+  long color = id_color_dict[ind] ;
+  //color=(color << 8 );
+  Serial.print("going to set color: 0x"); Serial.println(color, HEX);
+  p->color32(0,color,1);
+  p->show();
+  return;
+}
 
 boolean filter_msg(long can_id,byte *interested_in){
     //Mask to extract module ID
     long module_id= (can_id >> 18) & 0xFF;
+    
     for(int i=0; i<10;i++){
     if(module_id==interested_in[i]){
         //MATCH! this module is interested in messages from this source
@@ -146,8 +158,9 @@ void GCANController::handle_can_msg(int packet_size){
     }
     Serial.print("Received ");
     Serial.print("packet with id 0x");
+  
     long packetID=CAN.packetId();
-    Serial.print(packetID, HEX);
+    set_pixel(this->pixel,packetID);
     if(!filter_msg(packetID,this->interested_in)){
       //this packet is not usefull
       return;

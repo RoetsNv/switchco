@@ -1,0 +1,2 @@
+
+long id_color_dict[20] = {0xb03060,0x8a2be2,0xffff54,0x1e90ff};

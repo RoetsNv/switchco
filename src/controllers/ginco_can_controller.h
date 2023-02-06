@@ -1,6 +1,8 @@
 #include <stdlib.h>
 #include <Arduino.h>
 #include <CAN.h>
+#include <controllers/sk.h>
+
 struct GCanMessage {
   long extended_id;
   boolean event;
@@ -48,10 +50,11 @@ class GCANController {
     GCanMessage* last_msg;
     byte interested_in[10]; //list of module ID's the module should listen to
     boolean gcan_ready; // GCanMessage ready for module to read.
+    sk* pixel;
 
     GCAN_CALLBACK_SIGNATURE;
     public:
-        GCANController(byte moduleID);
+        GCANController(byte moduleID,sk* p);
         GCANController();
         void setup();
         void send_can_msg(long can_id,const byte *data,size_t buffer_size);

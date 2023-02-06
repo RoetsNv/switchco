@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <Arduino.h>
 #include <controllers/ginco_can_controller.h>
+#include <controllers/sk.h>
 class SwitchCo {
     private:
         //module specific
@@ -20,7 +21,6 @@ class SwitchCo {
         boolean *digitalIO; // which outputs are Digital IO (1) or analog IO (0)
         const int pwm_freq=10000;
         const int pwm_res=8; //resolution of pwm outputs
-        
         //input related
         const uint8_t in_gpio[7]={15,33,26,27,13,4,16};
         unsigned long last_press[7];//last press of 6 inputs
@@ -32,6 +32,7 @@ class SwitchCo {
         boolean multiple_press[7];
         void on_timer(int index);
     public:
+        sk pixel;
         int output_state[7];
         SwitchCo(byte moduleID,String friendly_name,boolean *digitialIO);
         void init();

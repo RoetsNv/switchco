@@ -65,8 +65,8 @@ return( kleur );
 
 uint32_t breakcolor( uint32_t kleur, uint8_t *r,uint8_t *g,uint8_t *b,uint8_t *w ){
 
-*g = (kleur >> 24 )&0xff;
-*r = (kleur >> 16 )&0xff;
+*r = (kleur >> 24 )&0xff;
+*g = (kleur >> 16 )&0xff;
 *b = (kleur >> 8 )&0xff;
 *w = kleur&0xff;
 
