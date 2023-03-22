@@ -4,6 +4,7 @@ boolean fade_up[7]={true,true,true,true,true,true,true};
 boolean show_click_effect[7]={true,true,true,true,true,true,true}; //show effect when pressed (linked input <---> output)
 boolean click_effect_running[7]={false,false,false,false,false,false,false}; 
 boolean pulse_effect[7]={false,false,false,false,false,false,false}; //show pulse effect on output x
+boolean pulse_effect_slow[7]={false,false,false,false,false,false,false}; //show pulse effect on output x
 boolean blink_effect[7]={false,false,false,false,false,false,false}; //show blink effect on output x
 void reset_effects(int index){
     pulse_effect[index]=false;
@@ -15,11 +16,11 @@ void setup_can_ids(GCANController * ctrl){
     ctrl->add_moduleID(0x03);
 }
 
-SwitchCo::SwitchCo(byte moduleID, String friendly_name,boolean* digitialIOarr):
+SwitchCo::SwitchCo(byte moduleID, String friendly_name ):
     moduleID(moduleID),
-    friendly_name(friendly_name),
-    digitalIO(digitialIOarr)
-{
+    friendly_name(friendly_name)
+    {
+    read_settings();
     setup_inputs();
     setup_outputs();
     this->pixel=sk();
@@ -37,6 +38,22 @@ SwitchCo::SwitchCo(byte moduleID, String friendly_name,boolean* digitialIOarr):
 
 }
 
+void SwitchCo::read_settings(){
+    this->flash.begin("settings",true);
+    //get digiIO settings
+    int8_t input_num=this->flash.getChar("digitalOut", 255);
+    boolean off_template[7]={false,false,false,false,false,false,false};
+    this->digitalOut=(input_num == 255) ? off_template : uint8_to_bool_array(input_num);
+    //get Inputs
+    input_num= this->flash.getChar("digitalIn", 255);
+    this->digitalIn=(input_num == 255) ? off_template : uint8_to_bool_array(input_num);
+    //get click effect
+    input_num= this->flash.getChar("show_click_effect", 255);
+    this->digitalOut=(input_num == 255) ? off_template : uint8_to_bool_array(input_num);
+    this->flash.end();
+}
+
+
 //Define input pins
 void SwitchCo::setup_inputs(){
     for(int i=0;i<7;i++){
@@ -45,6 +62,13 @@ void SwitchCo::setup_inputs(){
 }
 //----------Tools-----------------//
 
+bool* uint8_to_bool_array(uint8_t input) {
+    bool* output = new bool[8];
+    for(int i = 0; i < 8; i++) {
+        output[i] = (input & (1 << i)) != 0;
+    }
+    return output;
+}
 
 void SwitchCo::long_to_data_buffer(long input){
   
@@ -58,7 +82,7 @@ void SwitchCo::setup_outputs(){
     //Gpio pins connected to outputs L1->L6
     ledcSetup(0,this->pwm_freq, this->pwm_res);
     for(int i=0;i<7;i++){
-        if(this->digitalIO[i]){
+        if(this->digitalOut[i]){
             pinMode(out_gpio[i], OUTPUT);
         }
         else{
@@ -84,6 +108,7 @@ void SwitchCo::press_react(int index){
       this->set_output(index,256,true);
       click_effect_running[index]=true;
   }
+  this->can_controller.send_can_msg(this->can_controller.give_can_id(true,this->moduleID,0x00,index,0x00,false),data_buffer,1);
 }
 void SwitchCo::release_react(int index){
   now=millis();
@@ -92,7 +117,7 @@ void SwitchCo::release_react(int index){
   if(now-last_release[index]<double_press_val && multiple_press[index]){
     //double press detected
     //Serial.println("double press detected");
-    this->can_controller.send_can_msg(this->can_controller.give_can_id(true,this->moduleID,0x00,index,0x01,false),data_buffer,1);
+    this->can_controller.send_can_msg(this->can_controller.give_can_id(true,this->moduleID,0x00,index,0x02,false),data_buffer,1);
     multiple_press[index]=0;
   }
   else{
@@ -104,13 +129,13 @@ void SwitchCo::release_react(int index){
 }
 void SwitchCo::hold_react(int index){
   //Serial.println("Button is hold for longer");
-  this->can_controller.send_can_msg(this->can_controller.give_can_id(true,this->moduleID,0x00,index,0x02,false),data_buffer,1);  
+  this->can_controller.send_can_msg(this->can_controller.give_can_id(true,this->moduleID,0x00,index,0x03,false),data_buffer,1);  
 }
 
 // Output logic
 void SwitchCo::set_output(int index, int duty,boolean state){
     //check wether its digital out or PWM
-    if(this->digitalIO[index]){
+    if(this->digitalOut[index]){
         digitalWrite(out_gpio[index],state);
         this->output_state[index]= int(state);
     }
@@ -238,7 +263,7 @@ void  SwitchCo::on_can_msg(GCanMessage m){
                 switch (m.received_long)
                 {
                 case 1:
-                    if(!this->digitalIO[m.index]){
+                    if(!this->digitalOut[m.index]){
                         pulse_effect[m.index]=true;
                     }
                     break;
@@ -295,7 +320,11 @@ void SwitchCo::loop(){
             }
             if(input_state[i]){
             //going from 0 --> 1
-            press_react(i);
+            if(this->digitalIn[i]){
+                
+            }else{
+                press_react(i);
+            }
             }
             if(last_input_state[i]){
             //going from 1 --> 0
@@ -315,13 +344,13 @@ void SwitchCo::loop(){
             if(hold_time[i]<500){
                 //just a single click happend send 
                 //Serial.print("single click detected hold time: ");Serial.println(hold_time[i]);
-                this->can_controller.send_can_msg(this->can_controller.give_can_id(true,this->moduleID,0x00,i,0x00,false),data_buffer,1);
+                this->can_controller.send_can_msg(this->can_controller.give_can_id(true,this->moduleID,0x00,i,0x01,false),data_buffer,1);
             }
             else{
                 //Long release detected 
                 //Serial.print("Long release  detected hold time: ");Serial.println(hold_time[i]);
                 long_to_data_buffer(hold_time[i]);
-                this->can_controller.send_can_msg(this->can_controller.give_can_id(true,this->moduleID,0x00,i,0x03,false),data_buffer,4);
+                this->can_controller.send_can_msg(this->can_controller.give_can_id(true,this->moduleID,0x00,i,0x04,false),data_buffer,4);
             }
             multiple_press[i]=0;
         }
