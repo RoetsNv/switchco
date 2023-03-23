@@ -16,6 +16,24 @@ void setup_can_ids(GCANController * ctrl){
     ctrl->add_moduleID(0x03);
 }
 
+//----------Tools-----------------//
+
+bool* uint8_to_bool_array(uint8_t input) {
+    bool* output = new bool[8];
+    for(int i = 0; i < 8; i++) {
+        output[i] = (input & (1 << i)) != 0;
+    }
+    return output;
+}
+
+void SwitchCo::long_to_data_buffer(long input){
+  
+  for (int i = 0; i < 4; i++)
+  {
+    data_buffer[i] = ((input >> (8 * i)) & 0XFF);
+  }
+}
+
 SwitchCo::SwitchCo(byte moduleID, String friendly_name ):
     moduleID(moduleID),
     friendly_name(friendly_name)
@@ -35,11 +53,12 @@ SwitchCo::SwitchCo(byte moduleID, String friendly_name ):
     this->now=millis();
     this->can_controller=GCANController(this->moduleID,&this->pixel);
     setup_can_ids(&this->can_controller);
-
+    //blink to indicate successfull boot
+    this->set_output(0,255,true);delay(500);this->set_output(0,255,false);delay(500);this->set_output(0,255,true);delay(500);this->set_output(0,255,false);delay(500);
 }
 
 void SwitchCo::read_settings(){
-    this->flash.begin("settings",true);
+    this->flash.begin("sc_settings",true);
     //get digiIO settings
     int8_t input_num=this->flash.getChar("digitalOut", 255);
     boolean off_template[7]={false,false,false,false,false,false,false};
@@ -48,7 +67,7 @@ void SwitchCo::read_settings(){
     input_num= this->flash.getChar("digitalIn", 255);
     this->digitalIn=(input_num == 255) ? off_template : uint8_to_bool_array(input_num);
     //get click effect
-    input_num= this->flash.getChar("show_click_effect", 255);
+    input_num= this->flash.getChar("click_eff", 255);
     this->digitalOut=(input_num == 255) ? off_template : uint8_to_bool_array(input_num);
     this->flash.end();
 }
@@ -60,23 +79,7 @@ void SwitchCo::setup_inputs(){
         pinMode(in_gpio[i], INPUT_PULLUP);
     }
 }
-//----------Tools-----------------//
 
-bool* uint8_to_bool_array(uint8_t input) {
-    bool* output = new bool[8];
-    for(int i = 0; i < 8; i++) {
-        output[i] = (input & (1 << i)) != 0;
-    }
-    return output;
-}
-
-void SwitchCo::long_to_data_buffer(long input){
-  
-  for (int i = 0; i < 4; i++)
-  {
-    data_buffer[i] = ((input >> (8 * i)) & 0XFF);
-  }
-}
 
 void SwitchCo::setup_outputs(){
     //Gpio pins connected to outputs L1->L6
@@ -105,7 +108,7 @@ void SwitchCo::setup_outputs(){
 void SwitchCo::press_react(int index){  
   last_press[index]=millis();
   if(show_click_effect[index]){
-      this->set_output(index,256,true);
+      this->set_output(index,255,true);
       click_effect_running[index]=true;
   }
   this->can_controller.send_can_msg(this->can_controller.give_can_id(true,this->moduleID,0x00,index,0x00,false),data_buffer,1);
@@ -195,14 +198,14 @@ void on_timer_1(SwitchCo* s){
                 s->set_output(i,0,false);
             }
             else{
-            s->set_output(i,256,true); 
+            s->set_output(i,255,true); 
             }
         }
     }   
 }
 void on_timer_2(SwitchCo* s){
     //send heartbeat
-    s->heartbeat();
+    //s->heartbeat();
 }
 void SwitchCo::heartbeat(){
     this->can_controller.send_can_msg(this->can_controller.give_can_id(true,this->moduleID,0xFF,0x00,0x00,false),data_buffer,1);
@@ -239,11 +242,11 @@ void  SwitchCo::on_can_msg(GCanMessage m){
             //switch on with value
             case 0x01:
                 if(m.received_long!=0){
-                    int result = (m.received_long > 256) ? 256 : m.received_long;
+                    int result = (m.received_long > 255) ? 255 : m.received_long;
                     this->set_output(m.index,result,true);
                 }
                 else{
-                    this->set_output(m.index,256,true);
+                    this->set_output(m.index,255,true);
                 }
                 this->can_controller.ack_msg(&m,data_buffer,1);
                 break;
@@ -255,7 +258,7 @@ void  SwitchCo::on_can_msg(GCanMessage m){
                     this->set_output(m.index,0,false);
                 }
                 else{
-                this->set_output(m.index,256,true); 
+                this->set_output(m.index,255,true); 
                 }
                 this->can_controller.ack_msg(&m,data_buffer,1);
                 break;
@@ -287,6 +290,53 @@ void  SwitchCo::on_can_msg(GCanMessage m){
                 //nothing 
                 break;
             }            
+        }
+        // request state of digi in
+        else if(m.feature_type == 3){
+            switch(m.function_address) {
+            case 0xFF:
+                //request state
+                long_to_data_buffer(this->input_state[m.index]);
+                this->can_controller.ack_msg(&m,data_buffer,1);
+                break;
+            default:
+                //nothing 
+                break;
+            }   
+        }
+        //get/set system settings
+        else if(m.feature_type == 7){
+            if(m.function_address== 0xFF){
+                ESP.restart();
+            }
+            this->flash.begin("sc_settings",false);
+            // 127 --> 01111111 higher than this is illegal
+            if(m.received_long>127){return;}
+            uint8_t uset = static_cast<uint8_t>(m.received_long);
+            switch(m.function_address) {
+                case 0x00:
+                    this->flash.putChar("digitalOut", uset);
+                    break;
+                case 0x01:
+                    this->flash.putChar("digitalIn", uset);
+                    break;
+                case 0x02:
+                    this->flash.putChar("click_eff", uset);
+                    break;
+                case 0x10:
+                    long_to_data_buffer(this->flash.getChar("digitalOut", 255));
+                    this->can_controller.ack_msg(&m,data_buffer,1);
+                    break;
+                case 0x11:
+                    long_to_data_buffer(this->flash.getChar("digitalIn", 255));
+                    this->can_controller.ack_msg(&m,data_buffer,1);
+                    break;
+                case 0x12:
+                    long_to_data_buffer(this->flash.getChar("click_eff", 255));
+                    this->can_controller.ack_msg(&m,data_buffer,1);
+                    break;
+            }
+            this->flash.end();
         }
     }   
 }
@@ -321,14 +371,20 @@ void SwitchCo::loop(){
             if(input_state[i]){
             //going from 0 --> 1
             if(this->digitalIn[i]){
-                
+                this->long_to_data_buffer(2);
+                this->can_controller.send_can_msg(this->can_controller.give_can_id(true,this->moduleID,0x03,i,0x00,false),data_buffer,1);
             }else{
                 press_react(i);
             }
             }
             if(last_input_state[i]){
             //going from 1 --> 0
-            release_react(i); 
+            if(this->digitalIn[i]){
+                this->long_to_data_buffer(1);
+                this->can_controller.send_can_msg(this->can_controller.give_can_id(true,this->moduleID,0x03,i,0x00,false),data_buffer,1);
+            }else{
+                release_react(i); 
+            }
             }
             last_input_state[i]=input_state[i];
         }
