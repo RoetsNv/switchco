@@ -461,7 +461,7 @@ void SwitchCo::loop(){
         input_state[i]=!digitalRead(in_select);
         if(input_state[i]!=last_input_state[i]){
             //Debounce input
-            if(millis()-last_press[i] <20){
+            if(millis()-last_press[i] <25){
                 return;
             }
             if(input_state[i]){
