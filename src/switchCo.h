@@ -12,8 +12,8 @@ class SwitchCo {
         String hw_version;
         byte data_buffer[8];
         GCANController can_controller;
-        const int timers[3]={35,500,5000};
-        int timer_ticks[3]={0,0,0};
+        const int timers[4]={35,100,500,5000};
+        int timer_ticks[4]={0,0,0};
         unsigned long now;
         unsigned long long_press_val; //max hold time until it is not interpreted as a click but a long press
         unsigned long double_press_val; //max time between 2 clicks to be a double press
@@ -32,6 +32,7 @@ class SwitchCo {
         boolean last_input_state[7];
         boolean hold_sent[7];
         boolean multiple_press[7];
+        uint8_t last_pwm_state[7];
         Preferences flash; // Persistant storage ESP32
 
         void on_timer(int index);

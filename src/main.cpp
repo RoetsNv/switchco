@@ -4,7 +4,7 @@
 SwitchCo* s;
 void setup() {
     Serial.begin(115200);
-    s = new SwitchCo(0x03,"test03");
+    s = new SwitchCo(0x02,"test01");
 }
 void loop() {
   s->loop();

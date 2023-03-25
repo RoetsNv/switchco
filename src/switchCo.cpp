@@ -10,6 +10,7 @@ boolean blink_effect[7]={false,false,false,false,false,false,false}; //show blin
 void reset_effects(int index){
     pulse_effect[index]=false;
     blink_effect[index]=false;
+    pulse_effect_slow[index]= false;
 }
 void setup_can_ids(GCANController * ctrl){
     ctrl->add_moduleID(0x01);
@@ -48,6 +49,9 @@ SwitchCo::SwitchCo(byte moduleID, String friendly_name ):
     //initialize data to 0
     for(int i=0;i<8;i++){
         this->data_buffer[i]=0x00;
+        if(i<7){
+            this->last_pwm_state[i]= 255;
+        }
     }
     this->en_heartbeat=false;
     this->long_press_val=500;
@@ -125,8 +129,8 @@ void SwitchCo::setup_outputs(){
 void SwitchCo::press_react(int index){  
   last_press[index]=millis();
   if(show_click_effect[index]){
-      this->set_output(index,255,true);
       click_effect_running[index]=true;
+      this->set_output(index,255,true);
   }
   this->can_controller.send_can_msg(this->can_controller.give_can_id(true,this->moduleID,0x00,index,0x00,false),data_buffer,1);
 }
@@ -154,6 +158,7 @@ void SwitchCo::hold_react(int index){
 
 // Output logic
 void SwitchCo::set_output(int index, int duty,boolean state){
+    boolean iseffect= (click_effect_running[index] || pulse_effect[index] )? true:false;
     //check wether its digital out or PWM
     if(this->digitalOut[index]){
         digitalWrite(out_gpio[index],state);
@@ -161,6 +166,13 @@ void SwitchCo::set_output(int index, int duty,boolean state){
     }
     else{
         if(state){
+            //when duty -1 --> restore last known brightness
+            if(duty<0){
+                duty= this->last_pwm_state[index];
+            }else{
+                //only store last state when no effect
+                if(!iseffect){this->last_pwm_state[index]= duty;}
+            }
             ledcWrite(index, duty);
             this->output_state[index]= int(duty);
         }
@@ -194,7 +206,24 @@ void on_timer_0(SwitchCo* s){
                 s->set_output(i,to_set,true); 
             }
         }
-
+        if(pulse_effect_slow[i] && !click_effect_running[i]){
+            if(fade_up[i] ){
+                int to_set=s->output_state[i]+3;
+                if(to_set>254){
+                    fade_up[i]=false;
+                    to_set=254;
+                }
+                s->set_output(i,to_set,true); 
+            }
+            else{
+                int to_set=s->output_state[i]-3;
+                if(to_set<0){
+                    fade_up[i]=true;
+                    to_set=0;
+                }  
+                s->set_output(i,to_set,true); 
+            }
+        }
         if(click_effect_running[i]){
             int to_set=s->output_state[i]-10;
             if(to_set<=0){
@@ -208,6 +237,28 @@ void on_timer_0(SwitchCo* s){
     
 }
 void on_timer_1(SwitchCo* s){
+    for(int i = 0;i<7;i++){
+    if(pulse_effect_slow[i] && !click_effect_running[i]){
+            if(fade_up[i] ){
+                int to_set=s->output_state[i]+10;
+                if(to_set>254){
+                    fade_up[i]=false;
+                    to_set=254;
+                }
+                s->set_output(i,to_set,true); 
+            }
+            else{
+                int to_set=s->output_state[i]-10;
+                if(to_set<0){
+                    fade_up[i]=true;
+                    to_set=0;
+                }  
+                s->set_output(i,to_set,true); 
+            }
+        }
+    }
+}
+void on_timer_2(SwitchCo* s){
     s->pixel.clear();
     for(int i = 0;i<7;i++){
         if(blink_effect[i]){
@@ -220,7 +271,7 @@ void on_timer_1(SwitchCo* s){
         }
     }   
 }
-void on_timer_2(SwitchCo* s){
+void on_timer_3(SwitchCo* s){
     //send heartbeat
     if(s->en_heartbeat){
         s->heartbeat();
@@ -236,10 +287,12 @@ void SwitchCo::on_timer(int index){
         on_timer_0(this);
         break;
     case 1:
-        on_timer_1(this);
+        //on_timer_1(this);
         break;
     case 2:
         on_timer_2(this);
+    case 3:
+        on_timer_3(this);
     break;
     default:
         // code block
@@ -259,14 +312,14 @@ void  SwitchCo::on_can_msg(GCanMessage m){
                 this->set_output(m.index,0,false);
                 this->can_controller.ack_msg(&m,data_buffer,1);
                 break;
-            //switch on with value
+            //switch on with value pass 0 to restore previous state
             case 0x01:
                 if(m.received_long!=0){
                     int result = (m.received_long > 255) ? 255 : m.received_long;
                     this->set_output(m.index,result,true);
                 }
                 else{
-                    this->set_output(m.index,255,true);
+                    this->set_output(m.index,-1,true);
                 }
                 this->can_controller.ack_msg(&m,data_buffer,1);
                 break;
@@ -278,10 +331,11 @@ void  SwitchCo::on_can_msg(GCanMessage m){
                     this->set_output(m.index,0,false);
                 }
                 else{
-                this->set_output(m.index,255,true); 
+                this->set_output(m.index,-1,true); 
                 }
                 this->can_controller.ack_msg(&m,data_buffer,1);
                 break;
+            //show effect
             case 0x03:
                 switch (m.received_long)
                 {
@@ -293,13 +347,19 @@ void  SwitchCo::on_can_msg(GCanMessage m){
                 case 2:
                     blink_effect[m.index]=true;
                     break;
+                case 3:
+                    pulse_effect_slow[m.index]=true;
+                    break;
                 default:
                     this->set_output(m.index,0,false);
-                    blink_effect[m.index]=false;
-                    pulse_effect[m.index]=false;
+                    reset_effects(m.index);
+
                     break;
                 }
                 this->can_controller.ack_msg(&m,data_buffer,1);
+                break;
+            case 0x04:
+                pulse_effect_slow[m.index]=false;
                 break;
             case 0xFF:
                 //request state
