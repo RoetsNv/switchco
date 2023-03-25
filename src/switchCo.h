@@ -12,10 +12,9 @@ class SwitchCo {
         String hw_version;
         byte data_buffer[8];
         GCANController can_controller;
-        const int timers[3]={35,500,10000};
+        const int timers[3]={35,500,5000};
         int timer_ticks[3]={0,0,0};
         unsigned long now;
-        unsigned long heartbeat_interval; //when heartbeats should be send
         unsigned long long_press_val; //max hold time until it is not interpreted as a click but a long press
         unsigned long double_press_val; //max time between 2 clicks to be a double press
         //output related
@@ -37,6 +36,7 @@ class SwitchCo {
 
         void on_timer(int index);
     public:
+        boolean en_heartbeat; //should 5second heartbeats be send
         sk pixel;
         int output_state[7];
         SwitchCo(byte moduleID,String friendly_name);

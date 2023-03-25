@@ -42,19 +42,19 @@ SwitchCo::SwitchCo(byte moduleID, String friendly_name ):
     read_settings();
     setup_inputs();
     setup_outputs();
-        Serial.println("Done IO");
+    Serial.println("Done IO");
     this->pixel=sk();
     this->pixel.begin(32,1);
     //initialize data to 0
     for(int i=0;i<8;i++){
         this->data_buffer[i]=0x00;
     }
-    this->heartbeat_interval=2000;
+    this->en_heartbeat=false;
     this->long_press_val=500;
     this->double_press_val=300;
     this->now=millis();
     this->can_controller=GCANController(this->moduleID,&this->pixel);
-        Serial.println("Done Can");
+    Serial.println("Done Can");
     setup_can_ids(&this->can_controller);
     //blink to indicate successfull boot
     this->set_output(0,255,true);delay(500);this->set_output(0,255,false);delay(500);this->set_output(0,255,true);delay(500);this->set_output(0,255,false);delay(500);
@@ -222,7 +222,10 @@ void on_timer_1(SwitchCo* s){
 }
 void on_timer_2(SwitchCo* s){
     //send heartbeat
-    //s->heartbeat();
+    if(s->en_heartbeat){
+        s->heartbeat();
+    }
+    
 }
 void SwitchCo::heartbeat(){
     this->can_controller.send_can_msg(this->can_controller.give_can_id(true,this->moduleID,0xFF,0x00,0x00,false),data_buffer,1);
@@ -323,16 +326,24 @@ void  SwitchCo::on_can_msg(GCanMessage m){
         }
         //get/set system settings
         else if(m.feature_type == 7){
-            //Restart module
-            if(m.function_address== 0xFF){
-                ESP.restart();
-            }
-            //Full reset and restart
-            else if (m.function_address== 0xFE){
+            //None NVS functions
+            switch(m.function_address) {
+                //Full reset and restart
+                case 0xFF:
+                    ESP.restart();
+                    break;
+                //Restart module
+                case 0XFE:
                     this->flash.begin("sc_settings",true);
                     this->flash.clear();
                     this->flash.end();
                     ESP.restart();
+                    break;
+                //Set heartbeat
+                case 0xFD:
+                    this->en_heartbeat = (m.received_long == 1)? true:false;
+                    return;
+                    break;
             }
             this->flash.begin("sc_settings",false);
             // 127 --> 01111111 higher than this is illegal //255 resets the value
