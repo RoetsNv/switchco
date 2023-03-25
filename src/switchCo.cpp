@@ -100,7 +100,7 @@ void SwitchCo::setup_outputs(){
     //Gpio pins connected to outputs L1->L6
     ledcSetup(0,this->pwm_freq, this->pwm_res);
     for(int i=0;i<7;i++){
-        if(!this->digitalOut[i]){
+        if(this->digitalOut[i]){
             Serial.print("Setting: ");Serial.print(i);Serial.println("digital");
             pinMode(out_gpio[i], OUTPUT);
         }
@@ -323,17 +323,20 @@ void  SwitchCo::on_can_msg(GCanMessage m){
         }
         //get/set system settings
         else if(m.feature_type == 7){
+            //Restart module
             if(m.function_address== 0xFF){
                 ESP.restart();
-            }else if (m.function_address== 0xFE){
+            }
+            //Full reset and restart
+            else if (m.function_address== 0xFE){
                     this->flash.begin("sc_settings",true);
                     this->flash.clear();
                     this->flash.end();
                     ESP.restart();
             }
             this->flash.begin("sc_settings",false);
-            // 127 --> 01111111 higher than this is illegal
-            if(m.received_long>127){return;}
+            // 127 --> 01111111 higher than this is illegal //255 resets the value
+            if(m.received_long>127 && m.received_long !=255){return;}
             uint8_t uset = static_cast<uint8_t>(m.received_long);
             switch(m.function_address) {
                 case 0x00:
