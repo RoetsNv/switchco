@@ -1,7 +1,8 @@
 #include "switchCo.h"
 //globals
+boolean off_template[8]={false,false,false,false,false,false,false,false};
 boolean fade_up[7]={true,true,true,true,true,true,true};
-boolean show_click_effect[7]={true,true,true,true,true,true,true}; //show effect when pressed (linked input <---> output)
+boolean* show_click_effect; //show effect when pressed (linked input <---> output)
 boolean click_effect_running[7]={false,false,false,false,false,false,false}; 
 boolean pulse_effect[7]={false,false,false,false,false,false,false}; //show pulse effect on output x
 boolean pulse_effect_slow[7]={false,false,false,false,false,false,false}; //show pulse effect on output x
@@ -41,6 +42,7 @@ SwitchCo::SwitchCo(byte moduleID, String friendly_name ):
     read_settings();
     setup_inputs();
     setup_outputs();
+        Serial.println("Done IO");
     this->pixel=sk();
     this->pixel.begin(32,1);
     //initialize data to 0
@@ -52,23 +54,36 @@ SwitchCo::SwitchCo(byte moduleID, String friendly_name ):
     this->double_press_val=300;
     this->now=millis();
     this->can_controller=GCANController(this->moduleID,&this->pixel);
+        Serial.println("Done Can");
     setup_can_ids(&this->can_controller);
     //blink to indicate successfull boot
     this->set_output(0,255,true);delay(500);this->set_output(0,255,false);delay(500);this->set_output(0,255,true);delay(500);this->set_output(0,255,false);delay(500);
+    Serial.println("Done init");
+}
+void print_arr(bool* in){
+    for(int i =0;i<8;i++){
+        Serial.print(in[i]);
+    }
+    Serial.println("");
 }
 
 void SwitchCo::read_settings(){
     this->flash.begin("sc_settings",true);
     //get digiIO settings
-    int8_t input_num=this->flash.getChar("digitalOut", 255);
-    boolean off_template[7]={false,false,false,false,false,false,false};
+    uint8_t input_num=this->flash.getUChar("digitalOut", 255);
+    Serial.print("DiGI out: ");Serial.println(input_num);
     this->digitalOut=(input_num == 255) ? off_template : uint8_to_bool_array(input_num);
+    print_arr(this->digitalOut);
     //get Inputs
-    input_num= this->flash.getChar("digitalIn", 255);
+    input_num= this->flash.getUChar("digitalIn", 255);
+    Serial.print("DiGI in: ");Serial.println(input_num);
     this->digitalIn=(input_num == 255) ? off_template : uint8_to_bool_array(input_num);
+    print_arr(this->digitalIn);
     //get click effect
-    input_num= this->flash.getChar("click_eff", 255);
-    this->digitalOut=(input_num == 255) ? off_template : uint8_to_bool_array(input_num);
+    input_num= this->flash.getUChar("click_eff", 255);
+    Serial.print("click eff: ");Serial.println(input_num);
+    show_click_effect=(input_num == 255) ? off_template : uint8_to_bool_array(input_num);
+    print_arr(show_click_effect);
     this->flash.end();
 }
 
@@ -85,11 +100,13 @@ void SwitchCo::setup_outputs(){
     //Gpio pins connected to outputs L1->L6
     ledcSetup(0,this->pwm_freq, this->pwm_res);
     for(int i=0;i<7;i++){
-        if(this->digitalOut[i]){
+        if(!this->digitalOut[i]){
+            Serial.print("Setting: ");Serial.print(i);Serial.println("digital");
             pinMode(out_gpio[i], OUTPUT);
         }
         else{
             // configure LED PWM functionalitites
+            Serial.print("Setting: ");Serial.print(i);Serial.println("analog");
             ledcSetup(i,this->pwm_freq, this->pwm_res);
             ledcAttachPin(out_gpio[i], i);
         }
@@ -308,6 +325,11 @@ void  SwitchCo::on_can_msg(GCanMessage m){
         else if(m.feature_type == 7){
             if(m.function_address== 0xFF){
                 ESP.restart();
+            }else if (m.function_address== 0xFE){
+                    this->flash.begin("sc_settings",true);
+                    this->flash.clear();
+                    this->flash.end();
+                    ESP.restart();
             }
             this->flash.begin("sc_settings",false);
             // 127 --> 01111111 higher than this is illegal
@@ -315,24 +337,24 @@ void  SwitchCo::on_can_msg(GCanMessage m){
             uint8_t uset = static_cast<uint8_t>(m.received_long);
             switch(m.function_address) {
                 case 0x00:
-                    this->flash.putChar("digitalOut", uset);
+                    this->flash.putUChar("digitalOut", uset);
                     break;
                 case 0x01:
-                    this->flash.putChar("digitalIn", uset);
+                    this->flash.putUChar("digitalIn", uset);
                     break;
                 case 0x02:
-                    this->flash.putChar("click_eff", uset);
+                    this->flash.putUChar("click_eff", uset);
                     break;
                 case 0x10:
-                    long_to_data_buffer(this->flash.getChar("digitalOut", 255));
+                    long_to_data_buffer(this->flash.getUChar("digitalOut", 255));
                     this->can_controller.ack_msg(&m,data_buffer,1);
                     break;
                 case 0x11:
-                    long_to_data_buffer(this->flash.getChar("digitalIn", 255));
+                    long_to_data_buffer(this->flash.getUChar("digitalIn", 255));
                     this->can_controller.ack_msg(&m,data_buffer,1);
                     break;
                 case 0x12:
-                    long_to_data_buffer(this->flash.getChar("click_eff", 255));
+                    long_to_data_buffer(this->flash.getUChar("click_eff", 255));
                     this->can_controller.ack_msg(&m,data_buffer,1);
                     break;
             }

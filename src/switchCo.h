@@ -20,7 +20,7 @@ class SwitchCo {
         unsigned long double_press_val; //max time between 2 clicks to be a double press
         //output related
         const uint8_t out_gpio[7]={23,25,14,12,19,18,17};
-        boolean *digitalOut; // which outputs are Digital IO (1) or analog IO (0)
+        boolean *digitalOut; // which outputs are Digital IO (0) or analog IO (1)
         boolean *digitalIn; // is input button (0) or generic in (1)
         const int pwm_freq=10000;
         const int pwm_res=8; //resolution of pwm outputs
